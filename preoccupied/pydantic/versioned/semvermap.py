@@ -21,11 +21,12 @@ Version-aware mapping of semantic versions to values with policy-driven selectio
 """
 
 
+import re
 from dataclasses import dataclass
-from typing import Any, Dict, Generic, List, MutableMapping, Optional, Protocol, Sequence, TypeVar, Union
+from typing import (Any, Dict, Generic, Iterator, List, Mapping, Optional,
+                    Protocol, Sequence, Tuple, TypeVar, Union)
 
 from semver import Version
-import re
 
 
 class _Sentinel:
@@ -185,17 +186,6 @@ def lookup_policy(policy: str) -> Optional[ResolutionPolicy]:
 V = TypeVar("V")
 
 
-@dataclass(slots=True)
-class SemverEntry(Generic[V]):
-    """
-    Stored entry capturing the parsed semantic version and associated value.
-    """
-
-    raw: str
-    parsed: Version
-    value: V
-
-
 class SemverMap(Generic[V]):
     """
     Mapping that stores versioned values and resolves selectors via policies.
@@ -207,8 +197,15 @@ class SemverMap(Generic[V]):
             default_policy: Union[str, ResolutionPolicy, None] = None) -> None:
 
         self._default_policy = lookup_policy(default_policy) or ResolveVersionExact()
-        self._versions: List[SemverEntry[V]] = []
-        self._cache: Dict[str, Any] = {}
+
+        # map of Version to value
+        self._entries: Dict[Version, V] = {}
+
+        # sorted list of Versions from _entries.keys()
+        self._versions: List[Version] = []
+
+        # cache of selector str to Version, bypassing the resolver
+        self._cache: Dict[str, Version] = {}
 
 
     def resolver(
@@ -235,9 +232,15 @@ class SemverMap(Generic[V]):
         if isinstance(version, str):
             version = Version.parse(version)
 
-        self._entries[version] = SemverEntry(version=version, value=value)
-        self._versions = sorted(self._entries.keys())
-        self._cache.clear()
+        if version in self._entries:
+            self._entries[version] = value
+
+        else:
+            # adding a new version means we need to clear the cache and re-sort the
+            # versions list
+            self._cache.clear()
+            self._entries[version] = value
+            self._versions = sorted(self._entries.keys())
 
 
     def get(self,
@@ -259,42 +262,115 @@ class SemverMap(Generic[V]):
         :return: The value for the selector.
         """
 
-        if str in self._cache:
-            version = self._cache[selector]
+        if policy is None:
+            if selector in self._cache:
+                version = self._cache[selector]
+            else:
+                resolver = self.resolver()
+                version = resolver.resolve(selector, self._versions)
+                self._cache[selector] = version
         else:
+            # when a policy is provided, we bypass the cache
             resolver = self.resolver(policy)
             version = resolver.resolve(selector, self._versions)
-            self._cache[selector] = version
 
         if version is None or version not in self._entries:
             if default is _MISSING:
                 raise ValueError(f"No version matching {selector}")
             return default
-        return self._entries[version].value
+        return self._entries[version]
 
 
-    def versions(self) -> list[str]:
+    def __getitem__(self, selector: str) -> V:
         """
-        Return the stored versions in ascending semantic order.
+        Return the value for the given selector.
         """
 
-        raise NotImplementedError("SemverMap.versions() requires implementation.")
+        return self.get(selector)
 
 
-    def earliest(self) -> str:
+    def __setitem__(self, selector: str, value: V) -> None:
+        """
+        Set the value for the given selector.
+        """
+
+        self.set(selector, value)
+
+
+    def __delitem__(self, selector: str) -> None:
+        """
+        Delete the value for the given selector.
+        """
+
+        self.delete(selector)
+
+
+    def __contains__(self, selector: Union[str, Version]) -> bool:
+        """
+        Return True if the given selector is stored.
+        """
+
+        if isinstance(selector, str):
+            if selector in self._cache:
+                return True
+            else:
+                resolver = self.resolver()
+                version = resolver.resolve(selector, self._versions)
+                return version is not None and version in self._entries
+
+        elif isinstance(selector, Version):
+            return selector in self._entries
+
+        return False
+
+
+    def items(self) -> Iterator[Tuple[Version, V]]:
+        """
+        Return an iterator over the stored versions and values in ascending semantic order.
+        """
+
+        return self._entries.items()
+
+
+    def values(self) -> Iterator[V]:
+        """
+        Return an iterator over the stored values in ascending semantic order.
+        """
+
+        return self._entries.values()
+
+
+    def versions(self) -> Iterator[Version]:
+        """
+        Return an iterator over the stored versions in ascending semantic order.
+        """
+
+        return self._entries.keys()
+
+
+    def earliest(self) -> Optional[Version]:
         """
         Return the earliest (lowest) stored version.
         """
 
-        raise NotImplementedError("SemverMap.earliest() requires implementation.")
+        return self._versions[0] if self._versions else None
 
 
-    def latest(self) -> str:
+    def latest(self) -> Optional[Version]:
         """
         Return the latest (highest) stored version.
         """
 
-        raise NotImplementedError("SemverMap.latest() requires implementation.")
+        return self._versions[-1] if self._versions else None
+
+
+    def update(self, other: Mapping[Union[str, Version], V]) -> None:
+        """
+        Update the map with the values from another map.
+        """
+
+        for version, value in other.items():
+            self.set(version, value)
 
 
 # The end.
