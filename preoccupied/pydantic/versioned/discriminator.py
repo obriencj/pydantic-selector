@@ -191,11 +191,12 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
     Base model that dispatches to discriminator-registered subclasses.
     """
 
-    __discriminator_root__: Optional[Type["DiscriminatorBaseModel"]] = None
-    __discriminator_registry__: Dict[Any, Type["DiscriminatorBaseModel"]] = {}
-    __discriminator_selector_field__: Optional[str] = None
-    __discriminator_config__: Optional[DiscriminatorFieldConfig] = None
-    __selector_value__: Optional[Any] = None
+    # __discriminator_root__: Optional[Type["DiscriminatorBaseModel"]] = None
+    # __discriminator_registry__: Dict[Any, Type["DiscriminatorBaseModel"]] = {}
+    # __discriminator_selector_field__: Optional[str] = None
+    # __discriminator_config__: Optional[DiscriminatorFieldConfig] = None
+    # __selector_value__: Optional[Any] = None
+
 
     @classmethod
     def _root(cls) -> Type["DiscriminatorBaseModel"]:
@@ -205,6 +206,7 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
 
         return cls.__discriminator_root__ or cls
 
+
     @classmethod
     def selector_field(cls) -> Optional[str]:
         """
@@ -213,6 +215,7 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
 
         return cls._root().__discriminator_selector_field__
 
+
     @classmethod
     def selector_config(cls) -> Optional[DiscriminatorFieldConfig]:
         """
@@ -220,6 +223,7 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
         """
 
         return cls._root().__discriminator_config__
+
 
     @classmethod
     def _register_selector(cls, value: Any, subclass: Type["DiscriminatorBaseModel"]) -> None:
@@ -235,6 +239,7 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
                 f"{existing.__name__} already registered."
             )
         root.__discriminator_registry__[value] = subclass
+
 
     @classmethod
     def _extract_selector(cls, obj: Any) -> Any:
@@ -256,6 +261,7 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
             return getattr(obj, field)
 
         return _MISSING
+
 
     @classmethod
     def _resolve_subclass(
@@ -289,15 +295,15 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
             )
         return subclass, data
 
+
     @classmethod
     def model_validate(  # type: ignore[override]
-        cls,
-        obj: Any,
-        *,
-        strict: Optional[bool] = None,
-        from_attributes: Optional[bool] = None,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> "DiscriminatorBaseModel":
+            cls,
+            obj: Any,
+            *,
+            strict: Optional[bool] = None,
+            from_attributes: Optional[bool] = None,
+            context: Optional[Dict[str, Any]] = None) -> "DiscriminatorBaseModel":
         """
         Perform dynamic validation, dispatching façade classes to registered subclasses.
         """
