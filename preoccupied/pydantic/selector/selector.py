@@ -56,7 +56,7 @@ class SelectorMeta(type(BaseModel)):
                     "Mixing positional and keyword arguments is not"
                     " supported for façades.")
             if kwargs:
-                payload: Any = dict(kwargs)
+                payload: Any = kwargs
             elif len(args) == 1:
                 payload = args[0]
             elif not args:
@@ -166,15 +166,8 @@ def _model_validate_helper(
     """
 
     if cls is getattr(cls, "__selector_root__", cls):
-        registry: Optional[SelectorRegistry] = getattr(cls, "__selector_registry__", None)
-        if registry is None:
-            registry_cls: Type[SelectorRegistry] = getattr(
-                cls,
-                "__selector_registry_cls__",
-                MatchRegistry,
-            )
-            registry = registry_cls(cls)
-            cls.__selector_registry__ = registry
+        registry: SelectorRegistry = getattr(cls, "__selector_registry__", None)
+        assert registry is not None
 
         obj = registry.normalize(obj)
         subclass = registry.resolve(obj)

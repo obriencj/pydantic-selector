@@ -126,8 +126,8 @@ class MatchRegistry(SelectorRegistry):
 
 
     def discover_matches(
-        self,
-        subclass: Type[BaseModel]) -> List[Tuple[str, MatchConfig]]:
+            self,
+            subclass: Type[BaseModel]) -> List[Tuple[str, MatchConfig]]:
 
         found = []
         for name, field_info in subclass.model_fields.items():

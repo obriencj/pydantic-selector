@@ -1,6 +1,8 @@
-# preoccupied.pydantic-selector
+# Overview
 
-Dynamic selector utilities for [Pydantic](https://docs.pydantic.dev/) 2.x models. The package supplies façade base classes that dispatch validation to registered subclasses, plus semantic-version helpers for version-aware model families.
+preoccupied.pydantic-selector
+
+Dynamic selector utilities for [Pydantic](https://docs.pydantic.dev/) 2.x models. The package supplies base classes for facades that dispatch validation to registered subclasses, plus semantic-version helpers for version-aware model families.
 
 
 ## Key Features
