@@ -51,11 +51,11 @@ assert thing.payload == "v2"
 :ai-assistant: GPT-5 Codex via Cursor
 """
 
-from typing import Any, Optional, Type
+from typing import Any, Callable, Optional, Type
 
 from semver import Version as SemVersion
 
-from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic import GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
@@ -79,43 +79,49 @@ def _ensure_version(value: Any) -> SemVersion:
     if isinstance(value, SemVersion):
         return value
     if isinstance(value, str):
-        return SemVersion.parse(value)
+        return Version.parse(value)
     raise TypeError(f"Unsupported version value: {value!r}")
 
 
 class Version(SemVersion):
     """
     Pydantic-compatible wrapper validating semantic version values.
+
+    https://python-semver.readthedocs.io/en/3.0.4/advanced/combine-pydantic-and-semver.html
     """
-
-    @classmethod
-    def _validate(cls, value: Any) -> SemVersion:
-        return _ensure_version(value)
-
 
     @classmethod
     def __get_pydantic_core_schema__(
             cls,
-            source_type: Any,
-            handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
-        return core_schema.no_info_after_validator_function(
-            cls._validate,
-            core_schema.str_schema(),
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda value: str(value),
-                return_schema=core_schema.str_schema(),
+            _source_type: Any,
+            _handler: Callable[[Any], core_schema.CoreSchema]) -> core_schema.CoreSchema:
+
+        from_str_schema = core_schema.chain_schema(
+            [
+                core_schema.str_schema(),
+                core_schema.no_info_plain_validator_function(_ensure_version),
+            ],
+        )
+
+        return core_schema.json_or_python_schema(
+            json_schema=from_str_schema,
+            python_schema=core_schema.union_schema(
+                [
+                    core_schema.is_instance_schema(Version),
+                    from_str_schema,
+                ]
             ),
+            serialization=core_schema.to_string_ser_schema(),
         )
 
 
     @classmethod
     def __get_pydantic_json_schema__(
             cls,
-            core_schema_: core_schema.CoreSchema,
+            _core_schema: core_schema.CoreSchema,
             handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        json_schema = handler(core_schema_)
-        json_schema.update({"type": "string", "format": "semver"})
-        return json_schema
+
+        return handler(core_schema.str_schema())
 
 
 class VersionedRegistry(MatchRegistry):
