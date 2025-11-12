@@ -22,8 +22,7 @@ Version-aware mapping of semantic versions to values with policy-driven selectio
 
 
 import re
-from dataclasses import dataclass
-from typing import (Any, Dict, Generic, Iterator, List, Mapping, Optional,
+from typing import (Dict, Generic, Iterator, List, Mapping, Optional,
                     Protocol, Sequence, Tuple, TypeVar, Union)
 
 from semver import Version

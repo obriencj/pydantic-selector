@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-3.0-only
-
 """
 tests.test_semvermap
 Unit tests for the SemverMap convenience API.
@@ -13,7 +11,7 @@ Unit tests for the SemverMap convenience API.
 import pytest
 from semver import Version
 
-from preoccupied.pydantic.versioned.semvermap import SemverMap
+from preoccupied.pydantic.versioned import SemverMap
 
 
 @pytest.fixture

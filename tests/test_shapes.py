@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-3.0-only
-
 """
 tests.test_shapes
 Demonstrate discriminator-driven model dispatch using Shape façade.
@@ -79,6 +77,31 @@ def shapes():
     return SimpleNamespace(**locals())
 
 
+@pytest.fixture
+def shapes_allow_missing_facade():
+    """
+    Provide a namespace with allow-missing discriminator lacking a default.
+    """
+
+    class Shape(MatchSelector):
+        """
+        Façade that should fall back to itself when selector is omitted.
+        """
+
+        name: str = Discriminator(allow_missing=True)
+        color: str = Field(default="black")
+
+    class Circle(Shape):
+        """
+        Circle-specific properties.
+        """
+
+        name: str = Match("circle")
+        radius: float
+
+    return SimpleNamespace(**locals())
+
+
 def test_shape_model_validate_returns_concrete_subclass(shapes):
     """
     The façade dispatches validation to the target subclass.
@@ -100,6 +123,55 @@ def test_shape_instantiation_creates_concrete_instance(shapes):
     assert isinstance(instance, shapes.Triangle)
     assert instance.base == 3.0
     assert instance.height == 4.0
+
+
+# TODO: haven't decided on this yet
+# def test_shape_allow_missing_without_default_returns_facade(shapes_allow_missing_facade):
+#     """
+#     Missing selector with allow_missing but no default should return the façade.
+#     """
+
+#     payload = {"color": "silver"}
+#     instance = shapes_allow_missing_facade.Shape.model_validate(payload)
+#     assert isinstance(instance, shapes_allow_missing_facade.Shape)
+#     assert instance.color == "silver"
+
+
+def test_shape_requires_single_discriminator():
+    """
+    Facade definitions must declare exactly one discriminator field.
+    """
+
+    with pytest.raises(ValueError) as error:
+        class FacadeWithoutDiscriminator(MatchSelector):
+            """
+            Facade lacking discriminator; registration should fail.
+            """
+
+            color: str = Field(default="black")
+
+        FacadeWithoutDiscriminator  # pragma: no cover
+
+    assert "must declare exactly one Discriminator field" in str(error.value)
+
+
+def test_shape_rejects_multiple_discriminators():
+    """
+    Facade definitions cannot declare more than one discriminator field.
+    """
+
+    with pytest.raises(ValueError) as error:
+        class FacadeWithMultipleDiscriminators(MatchSelector):
+            """
+            Facade declaring two discriminators; registration should fail.
+            """
+
+            primary: str = Discriminator()
+            secondary: str = Discriminator()
+
+        FacadeWithMultipleDiscriminators  # pragma: no cover
+
+    assert "must declare exactly one Discriminator field" in str(error.value)
 
 
 def test_shape_missing_selector_raises(shapes):
@@ -243,6 +315,89 @@ def test_shape_explicit_blob_selector(shapes_with_default):
     instance = shapes_with_default.Shape.model_validate(payload)
     assert isinstance(instance, shapes_with_default.Blob)
     assert instance.payload == "goo"
+
+
+def test_shape_subclass_requires_single_match():
+    """
+    Subclasses must provide exactly one match selector override.
+    """
+
+    class Shape(MatchSelector):
+        """
+        Façade declaring a discriminator for testing.
+        """
+
+        name: str = Discriminator()
+
+    with pytest.raises(ValueError) as error:
+        class NoMatchShape(Shape):
+            """
+            Subclass failing to provide match configuration.
+            """
+
+            pass
+
+        NoMatchShape  # pragma: no cover
+
+    assert "must declare exactly one Match field" in str(error.value)
+
+
+def test_shape_subclass_rejects_multiple_matches():
+    """
+    Subclasses cannot declare more than one match selector.
+    """
+
+    class Shape(MatchSelector):
+        """
+        Façade declaring a discriminator for testing.
+        """
+
+        name: str = Discriminator()
+
+    with pytest.raises(ValueError) as error:
+        class MultiMatchShape(Shape):
+            """
+            Subclass declaring multiple match configurations.
+            """
+
+            name: str = Match("polygon")
+            alias: str = Match("poly")
+
+        MultiMatchShape  # pragma: no cover
+
+    assert "must declare exactly one Match field" in str(error.value)
+
+
+def test_shape_duplicate_match_values_disallowed():
+    """
+    Duplicate match values across subclasses must raise errors.
+    """
+
+    class Shape(MatchSelector):
+        """
+        Façade declaring a discriminator for testing.
+        """
+
+        name: str = Discriminator()
+
+    class FirstShape(Shape):
+        """
+        Subclass registering initial match value.
+        """
+
+        name: str = Match("duplicate")
+
+    with pytest.raises(ValueError) as error:
+        class DuplicateShape(Shape):
+            """
+            Subclass reusing existing match value.
+            """
+
+            name: str = Match("duplicate")
+
+        DuplicateShape  # pragma: no cover
+
+    assert "Duplicate selector value" in str(error.value)
 
 
 # The end.
