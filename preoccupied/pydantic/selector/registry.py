@@ -98,6 +98,16 @@ class MatchRegistry(SelectorRegistry):
             )
         self.discriminator_field, self.discriminator_config = found[0]
 
+        # if the discriminator config has a default value, register it, bypassing
+        # the register process because it won't have a MatchConfig
+        default = self.discriminator_config.default_value
+        if default is not ...:
+            self._default_register(default, self.facade)
+
+
+    def _default_register(self, value: Any, subclass: Type[BaseModel]) -> None:
+        self._entries[value] = SelectorMatch(value=value, subclass=subclass)
+
 
     def discover_discriminators(self) -> List[Tuple[str, DiscriminatorConfig]]:
         found = []
@@ -147,14 +157,20 @@ class MatchRegistry(SelectorRegistry):
         field = self.discriminator_field
         assert field is not None
 
-        config = self.discriminator_config
-
         if field not in payload:
-            if not config.allow_missing:
+            config = self.discriminator_config
+
+            missing_value = config.metadata.get("missing_value", ...)
+            if missing_value is not ...:
+                payload[field] = config.metadata["missing_value"]
+
+            elif config.default_value is not ...:
+                payload[field] = config.default_value
+
+            else:
                 raise ValueError(
                     f"{self.facade.__name__} requires discriminator field '{field}'."
                 )
-            payload[field] = config.default_value
 
         return payload
 
@@ -171,15 +187,20 @@ class MatchRegistry(SelectorRegistry):
         assert field in payload
         value = payload[field]
 
-        if value is ...:
-            return self.facade
-
         match = self._entries.get(value)
-        if match is None:
-            raise ValueError(
-                f"No discriminator match for value '{value}' on {self.facade.__name__}."
-            )
-        return match.subclass
+        if match is not None:
+            return match.subclass
+
+        config = self.discriminator_config
+        mismatch_value = config.metadata.get("mismatch_value", ...)
+        if mismatch_value is not ...:
+            match = self._entries.get(mismatch_value)
+            if match is not None:
+                return match.subclass
+
+        raise ValueError(
+            f"No discriminator match for value '{value}' on {self.facade.__name__}."
+        )
 
 
 # The end.

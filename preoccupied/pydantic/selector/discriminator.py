@@ -63,7 +63,6 @@ class DiscriminatorConfig:
     Marker metadata identifying discriminator behaviour for a façade field.
     """
 
-    allow_missing: bool
     default_value: Any
     metadata: Mapping[str, Any]
 
@@ -71,7 +70,8 @@ class DiscriminatorConfig:
 def Discriminator(  # noqa: N802 - factory function intentionally PascalCase
         default: Any = ...,
         *,
-        allow_missing: bool = False,
+        missing_value: Any = ...,
+        mismatch_value: Any = ...,
         metadata: Optional[Mapping[str, Any]] = None,
         **field_kwargs: Any) -> FieldInfo:
     """
@@ -83,15 +83,16 @@ def Discriminator(  # noqa: N802 - factory function intentionally PascalCase
     if metadata is None:
         metadata = {}
 
+    if missing_value is not ...:
+        metadata["missing_value"] = missing_value
+    if mismatch_value is not ...:
+        metadata["mismatch_value"] = mismatch_value
+
     config = DiscriminatorConfig(
-        allow_missing=allow_missing,
         default_value=default,
         metadata=metadata,
     )
-
-    existing: List[Any] = list(info.metadata)
-    existing.append(config)
-    object.__setattr__(info, "metadata", existing)
+    info.metadata.append(config)
 
     return info
 

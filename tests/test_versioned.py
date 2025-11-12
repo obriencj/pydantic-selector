@@ -24,7 +24,7 @@ def documents() -> SimpleNamespace:
     """
 
     class Document(VersionedSelector):
-        version: Version = Discriminator(default="1.0.0", allow_missing=True)
+        version: Version = Discriminator(missing_value="1.0.0")
         payload: str
 
     class DocumentV1(Document):
@@ -83,7 +83,7 @@ def exact_documents() -> SimpleNamespace:
     class Document(VersionedSelector):
         __version_policy__ = "exact"
 
-        version: Version = Discriminator(default="1.0.0", allow_missing=True)
+        version: Version = Discriminator(missing_value="1.0.0")
         payload: str
 
     class DocumentV1(Document):
