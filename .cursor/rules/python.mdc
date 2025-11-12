@@ -16,5 +16,7 @@ alwaysApply: true
 - Namespace packages must be empty (no `__init__.py` file)
 - Prefer `typing.Union` (and related aliases) over the Python 3.10 `|` syntax; avoid `from __future__ import annotations` unless strictly required.
 - Write triple-double-quoted docstrings in plain prose without backtick emphasis and leave a blank line between the docstring and implementation body.
-- For multi-line signatures, indent parameters two levels (8 spaces) beneath the definition and close the parenthesis on the same line as the return annotation or colon.
+- When quoting a string, use a single-quote strings for keyword values. Use double-quote strings for english text.
+- For multi-line method signatures, indent parameters two levels (8 spaces) beneath the definition and close the parenthesis on the same line as the return annotation or colon.
+- For all other multi-line collections, only indent one level (4 spaces)
 - Maintain a blank line between class or function definitions and terminate modules with `# The end.` followed by a single newline to match house style.
