@@ -12,7 +12,7 @@
 # along with this library; if not, see <http://www.gnu.org/licenses/>.
 
 """
-preoccupied.pydantic.versioned.registry
+preoccupied.pydantic.selector.registry
 Selector registry abstractions for facade-based selector models.
 
 :author: Christopher O'Brien <obriencj@preoccupied.net>

@@ -12,8 +12,29 @@
 # along with this library; if not, see <http://www.gnu.org/licenses/>.
 
 """
-preoccupied.pydantic.versioned.discriminator
-Dynamic discriminator helpers and registration-aware base model primitives.
+preoccupied.pydantic.selector.discriminator
+
+Registration field markers for façade models and concrete subclasses.
+
+Use the :func:`Discriminator` factory to create a discriminator field for a façade model.
+Use the :func:`Match` factory to create a field for a concrete subclass.
+
+Example:
+
+```python
+class Shape(MatchSelector):
+    name: str = Discriminator()
+    color: str = Field(default="black")
+
+class Circle(Shape):
+    name: str = Match("circle")
+    radius: float
+
+class Rectangle(Shape):
+    name: str = Match("rectangle")
+    width: float
+    height: float
+```
 
 :author: Christopher O'Brien <obriencj@preoccupied.net>
 :license: GNU General Public License v3

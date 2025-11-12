@@ -11,7 +11,7 @@ Unit tests for the SemverMap convenience API.
 import pytest
 from semver import Version
 
-from preoccupied.pydantic.versioned import SemverMap
+from preoccupied.pydantic.selector import SemverMap
 
 
 @pytest.fixture

@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from pydantic import Field
 
-from preoccupied.pydantic.versioned import Discriminator, MatchSelector, Match
+from preoccupied.pydantic.selector import Discriminator, MatchSelector, Match
 
 
 @pytest.fixture

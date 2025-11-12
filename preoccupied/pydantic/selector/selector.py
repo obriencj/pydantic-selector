@@ -12,7 +12,7 @@
 # along with this library; if not, see <http://www.gnu.org/licenses/>.
 
 """
-preoccupied.pydantic.versioned.discriminator
+preoccupied.pydantic.selector.discriminator
 Dynamic discriminator helpers and registration-aware base model primitives.
 
 :author: Christopher O'Brien <obriencj@preoccupied.net>

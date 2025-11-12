@@ -12,8 +12,39 @@
 # along with this library; if not, see <http://www.gnu.org/licenses/>.
 
 """
-preoccupied.pydantic.versioned.versioned
-Semantic-version aware selector primitives for versioned Pydantic models.
+preoccupied.pydantic.selector.versioned
+
+A façade selector model for Pydantic that resolves versioned subclasses using an
+internal :class:`SemverMap`.
+
+Example:
+
+```python
+class Thing(VersionedSelector):
+    version: Version = Discriminator(default="1.0.0", allow_missing=True)
+    payload: str
+
+class Thing_v1(Thing):
+    version: Version = Match("1.0.0")
+    payload: str = "v1"
+
+class Thing_v1_5(Thing):
+    version: Version = Match("1.5.0")
+    payload: str = "v1.5"
+
+class Thing_v2(Thing):
+    version: Version = Match("2.0.0")
+    payload: str = "v2"
+
+thing = Thing.model_validate({"version": "1.2.0"})
+assert thing.payload == "v1"
+
+thing = Thing.model_validate({"version": "1.5.1"})
+assert thing.payload == "v1.5"
+
+thing = Thing.model_validate({"version": "2.0.0"})
+assert thing.payload == "v2"
+```
 
 :author: Christopher O'Brien <obriencj@preoccupied.net>
 :license: GNU General Public License v3

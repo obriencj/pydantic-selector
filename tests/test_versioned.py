@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 from semver import Version
 
-from preoccupied.pydantic.versioned import (
+from preoccupied.pydantic.selector import (
     Discriminator, Match, Version,
     VersionedSelector)
 

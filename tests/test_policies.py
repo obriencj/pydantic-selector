@@ -11,7 +11,7 @@ Unit tests covering resolution policy helpers.
 import pytest
 from semver import Version
 
-from preoccupied.pydantic.versioned.semvermap import (
+from preoccupied.pydantic.selector.semvermap import (
     ResolveVersionExact,
     ResolveVersionGE,
     ResolveVersionLE)

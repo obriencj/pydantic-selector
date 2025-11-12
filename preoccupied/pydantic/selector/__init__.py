@@ -12,8 +12,9 @@
 # along with this library; if not, see <http://www.gnu.org/licenses/>.
 
 """
-preoccupied.pydantic.versioned
-Namespace package segment providing version-aware helpers for Pydantic models.
+preoccupied.pydantic.selector
+
+Façade selector models for Pydantic 2
 
 :author: Christopher O'Brien <obriencj@preoccupied.net>
 :license: GNU General Public License v3

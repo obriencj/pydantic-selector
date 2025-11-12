@@ -12,8 +12,28 @@
 # along with this library; if not, see <http://www.gnu.org/licenses/>.
 
 """
-preoccupied.pydantic.versioned.semvermap
-Version-aware mapping of semantic versions to values with policy-driven selection.
+preoccupied.pydantic.selector.semvermap
+
+Utility class, providing a mapping of semantic versions to values with
+policy-driven selection.
+
+Use the :class:`SemverMap` class to create a mapping of semantic versions to
+values.
+
+Example:
+
+```python
+mapping = SemverMap()
+mapping.set("1.0.0", "alpha")
+mapping.set("1.2.0", "bravo")
+mapping.set("2.0.0", "charlie")
+
+result = mapping.get("1.2.0")
+assert result == "bravo"
+
+result = mapping.get("1.1.5", policy="nearest_le")
+assert result == "alpha"
+```
 
 :author: Christopher O'Brien <obriencj@preoccupied.net>
 :license: GNU General Public License v3
