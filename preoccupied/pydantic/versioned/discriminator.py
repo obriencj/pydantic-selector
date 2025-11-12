@@ -32,6 +32,8 @@ from pydantic.fields import FieldInfo
 __all__ = (
     "Discriminator",
     "DiscriminatorFieldConfig",
+    "Match",
+    "MatchConfig",
     "SelectorMeta",
     "SimpleSelector",
     "create_selector_base",
@@ -50,6 +52,15 @@ class DiscriminatorFieldConfig:
     allow_missing: bool
     default_value: Any
     metadata: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class MatchConfig:
+    """
+    Marker metadata identifying a concrete subclass selector value.
+    """
+
+    value: Any
 
 
 def Discriminator(  # noqa: N802 - factory function intentionally PascalCase
@@ -193,10 +204,8 @@ class SelectorMeta(type(BaseModel)):
         """
 
         if selector_value is _MISSING:
-            raise ValueError(
-                f"{model_cls.__name__} must supply 'selector=\"...\"' when subclassing"
-                f" {root.__name__}."
-            )
+            selector_value = _extract_match_value(model_cls, root.__selector_discriminator__)
+
         model_cls.__selector_root__ = root
         cls._attach_interface(root)
         model_cls.__selector_root__ = root
@@ -366,6 +375,30 @@ def _find_selector_definition(
     return found
 
 
+def _extract_match_value(
+        model_cls: Type[BaseModel],
+        discriminator_field: Optional[str]) -> Any:
+    """
+    Identify the match value declared on the subclass.
+    """
+
+    if discriminator_field:
+        field_info = model_cls.model_fields.get(discriminator_field)
+        if field_info is not None:
+            for item in field_info.metadata:
+                if isinstance(item, MatchConfig):
+                    return item.value
+
+    for name, field_info in model_cls.model_fields.items():
+        for item in field_info.metadata:
+            if isinstance(item, MatchConfig):
+                return item.value
+
+    raise ValueError(
+        f"{model_cls.__name__} must declare selector metadata using Match(...)."
+    )
+
+
 def _normalize_payload(obj: Any) -> Dict[str, Any]:
     """
     Convert arbitrary payload objects into a mutable mapping.
@@ -432,6 +465,18 @@ class SimpleSelector(BaseModel, metaclass=SelectorMeta):
     """
 
     __selector_base__ = True
+
+
+def Match(value: Any) -> FieldInfo:  # noqa: N802 - PascalCase factory
+    """
+    Declare the selector value for a concrete subclass.
+    """
+
+    info = Field(default=value, init=False)
+    metadata = list(info.metadata)
+    metadata.append(MatchConfig(value=value))
+    object.__setattr__(info, "metadata", metadata)
+    return info
 
 
 # The end.

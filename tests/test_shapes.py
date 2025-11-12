@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from pydantic import Field, computed_field, model_validator
 
-from preoccupied.pydantic.versioned.discriminator import Discriminator, SimpleSelector
+from preoccupied.pydantic.versioned.discriminator import Discriminator, SimpleSelector, Match
 
 
 @pytest.fixture
@@ -35,34 +35,38 @@ def shapes():
         )
         color: str = Field(default="black")
 
-    class Circle(Shape, selector="circle"):
+    class Circle(Shape):
         """
         Circle-specific properties.
         """
 
+        name: str = Match("circle")
         radius: float
 
-    class Triangle(Shape, selector="triangle"):
+    class Triangle(Shape):
         """
         Triangle-specific properties.
         """
 
+        name: str = Match("triangle")
         base: float
         height: float
 
-    class Rectangle(Shape, selector="rectangle"):
+    class Rectangle(Shape):
         """
         Rectangle-specific properties.
         """
 
+        name: str = Match("rectangle")
         width: float
         height: float
 
-    class Square(Rectangle, selector="square"):
+    class Square(Rectangle):
         """
         Square-specific properties.
         """
 
+        name: str = Match("square")
         side: float
         width: float = Field(init=False, frozen=True, default=None)
         height: float = Field(init=False, frozen=True, default=None)
@@ -166,34 +170,38 @@ def shapes_with_default():
         name: str = Discriminator(default="blob", allow_missing=True)
         color: str = Field(default="black")
 
-    class Circle(Shape, selector="circle"):
+    class Circle(Shape):
         """
         Circle-specific properties.
         """
 
+        name: str = Match("circle")
         radius: float
 
-    class Triangle(Shape, selector="triangle"):
+    class Triangle(Shape):
         """
         Triangle-specific properties.
         """
 
+        name: str = Match("triangle")
         base: float
         height: float
 
-    class Rectangle(Shape, selector="rectangle"):
+    class Rectangle(Shape):
         """
         Rectangle-specific properties.
         """
 
+        name: str = Match("rectangle")
         width: float
         height: float
 
-    class Square(Rectangle, selector="square"):
+    class Square(Rectangle):
         """
         Square-specific properties.
         """
 
+        name: str = Match("square")
         side: float
         width: float = Field(init=False, frozen=True, default=None)
         height: float = Field(init=False, frozen=True, default=None)
@@ -203,11 +211,12 @@ def shapes_with_default():
             object.__setattr__(self, "width", self.side)
             object.__setattr__(self, "height", self.side)
 
-    class Blob(Shape, selector="blob"):
+    class Blob(Shape):
         """
         Default blob shape used when no selector is provided.
         """
 
+        name: str = Match("blob")
         payload: str = Field(default="blob")
 
     return SimpleNamespace(**locals())
