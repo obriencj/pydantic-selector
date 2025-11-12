@@ -14,9 +14,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from pydantic import Field, computed_field, model_validator
+from pydantic import Field
 
-from preoccupied.pydantic.versioned.discriminator import Discriminator, SimpleSelector, Match
+from preoccupied.pydantic.versioned import Discriminator, MatchSelector, Match
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def shapes():
     Provide a namespace containing Shape façade and concrete subclasses.
     """
 
-    class Shape(SimpleSelector):
+    class Shape(MatchSelector):
         """
         Façade capturing shared shape attributes and discriminator selector.
         """
@@ -162,7 +162,7 @@ def shapes_with_default():
     Provide a namespace containing Shape façade with default Blob fallback.
     """
 
-    class Shape(SimpleSelector):
+    class Shape(MatchSelector):
         """
         Façade that falls back to Blob when selector is missing.
         """

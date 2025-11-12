@@ -11,7 +11,20 @@ Namespace package segment providing version-aware helpers for Pydantic models.
 
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+
+from .discriminator import Discriminator, Match
+from .registry import SelectorRegistry, MatchRegistry
+from .selector import SelectorMeta, MatchSelector
+
+
+__all__ = (
+    "Discriminator",
+    "Match",
+    "SelectorRegistry",
+    "MatchRegistry",
+    "SelectorMeta",
+    "MatchSelector",
+)
 
 
 # The end.

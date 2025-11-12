@@ -20,20 +20,19 @@ Selector registry abstractions for facade-based selector models.
 :ai-assistant: GPT-5 Codex via Cursor
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple, Type
+from typing import Any, Dict, List, Tuple, Type
 
 from pydantic import BaseModel
+
+from .discriminator import DiscriminatorConfig, MatchConfig
+
 
 __all__ = (
     "MatchRegistry",
     "SelectorRegistry",
 )
-
-
-_MISSING = object()
 
 
 @dataclass(frozen=True)
@@ -51,26 +50,31 @@ class SelectorRegistry:
     Base interface for selector registries used by selector façades.
     """
 
-    def register(
-            self,
-            subclass: Type[BaseModel],
-            *,
-            value: Any) -> None:
+    def __init__(self, facade: Type[BaseModel]) -> None:
+        self.facade = facade
+
+
+    def register(self, subclass: Type[BaseModel]) -> None:
         """
-        Register a subclass for the provided selector value.
+        Register a subclass under this registry.
         """
 
         raise NotImplementedError
 
-    def resolve(
-            self,
-            payload: Dict[str, Any],
-            *,
-            field: str,
-            config: Any,
-            facade: Type[BaseModel]) -> Tuple[Type[BaseModel], Dict[str, Any]]:
+
+    def normalize(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Resolve the payload to a registered subclass.
+        Normalize the payload to the expected format for the selector.
+        """
+
+        if hasattr(self.facade, "preselect_normalize"):
+            payload = self.facade.preselect_normalize(payload)
+        return dict(payload)
+
+
+    def resolve(self, payload: Dict[str, Any]) -> Type[BaseModel]:
+        """
+        Resolve normalized payload to a registered subclass.
         """
 
         raise NotImplementedError
@@ -81,14 +85,35 @@ class MatchRegistry(SelectorRegistry):
     Default registry that matches payload selector values exactly.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, facade: Type[BaseModel]) -> None:
+        super().__init__(facade)
         self._entries: Dict[Any, SelectorMatch] = {}
 
-    def register(
-            self,
-            subclass: Type[BaseModel],
-            *,
-            value: Any) -> None:
+        found = self.discover_discriminators()
+        if len(found) != 1:
+            raise ValueError(
+                f"{self.facade.__name__} must declare exactly one Discriminator field."
+            )
+        self.discriminator_field, self.discriminator_config = found[0]
+
+
+    def discover_discriminators(self) -> List[Tuple[str, DiscriminatorConfig]]:
+        found = []
+        for name, field_info in self.facade.model_fields.items():
+            for item in field_info.metadata:
+                if isinstance(item, DiscriminatorConfig):
+                    found.append((name, item))
+        return found
+
+
+    def register(self, subclass: Type[BaseModel]) -> None:
+        found = self.discover_matches(subclass)
+        if len(found) != 1:
+            raise ValueError(
+                f"{subclass.__name__} must declare exactly one Match field."
+            )
+
+        value = found[0][1].value
         if value in self._entries:
             existing = self._entries[value].subclass
             raise ValueError(
@@ -97,29 +122,55 @@ class MatchRegistry(SelectorRegistry):
             )
         self._entries[value] = SelectorMatch(value=value, subclass=subclass)
 
-    def resolve(
-            self,
-            payload: Dict[str, Any],
-            *,
-            field: str,
-            config: Any,
-            facade: Type[BaseModel]) -> Tuple[Type[BaseModel], Dict[str, Any]]:
-        value = payload.get(field, _MISSING)
-        allow_missing = getattr(config, "allow_missing", False)
-        default_value = getattr(config, "default_value", None)
 
-        if value is _MISSING:
-            if not allow_missing:
+    def discover_matches(
+        self,
+        subclass: Type[BaseModel]) -> List[Tuple[str, MatchConfig]]:
+
+        found = []
+        for name, field_info in subclass.model_fields.items():
+            for item in field_info.metadata:
+                if isinstance(item, MatchConfig):
+                    found.append((name, item))
+        return found
+
+
+    def normalize(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize the payload to the expected format for the selector.
+        """
+
+        payload = super().normalize(payload)
+
+        config = self.discriminator_config
+
+        if self.discriminator_field not in payload:
+            if not config.allow_missing:
                 raise ValueError(
-                    f"{facade.__name__} requires discriminator field '{field}'."
+                    f"{self.facade.__name__} requires discriminator field '{self.discriminator_field}'."
                 )
-            value = default_value
-            payload[field] = value
+            payload[self.discriminator_field] = config.default_value
+
+        return payload
+
+
+    def resolve(self, payload: Dict[str, Any]) -> Type[BaseModel]:
+
+        # TODO: we could have a few different behaviors here for odd situations,
+        # like if allow_missing is True, but there's no default value... should we
+        # instantiate the facade as a fallback?
+
+        # we should have caught this in normalize, what went wrong?
+        assert self.discriminator_field in payload
+        value = payload[self.discriminator_field]
 
         match = self._entries.get(value)
         if match is None:
             raise ValueError(
-                f"No discriminator match for value '{value}' on {facade.__name__}."
+                f"No discriminator match for value '{value}' on {self.facade.__name__}."
             )
 
-        return match.subclass, payload
+        return match.subclass
+
+
+# The end.
