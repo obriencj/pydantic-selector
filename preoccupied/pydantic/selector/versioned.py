@@ -143,20 +143,23 @@ class VersionedRegistry(MatchRegistry):
 
     def normalize(self, payload: dict[str, Any]) -> dict[str, Any]:
         payload = super().normalize(payload)
-        field = getattr(self, "discriminator_field", None)
-        if field is None:
-            return payload
+
+        field = self.discriminator_field
+        assert field is not None
+
         if field not in payload:
             return payload
+
         value = payload[field]
         if value is ...:
             return payload
+
         payload[field] = str(_ensure_version(value))
         return payload
 
 
     def resolve(self, payload: dict[str, Any]) -> Type[MatchSelector]:
-        field = getattr(self, "discriminator_field", None)
+        field = self.discriminator_field
         if field is None or field not in payload:
             return self.facade
         selector = payload[field]

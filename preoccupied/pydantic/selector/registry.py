@@ -67,6 +67,8 @@ class SelectorRegistry:
         Normalize the payload to the expected format for the selector.
         """
 
+        # TODO: the preselect_normalize method isn't documented anywhere
+        # at all. whoops.
         if hasattr(self.facade, "preselect_normalize"):
             payload = self.facade.preselect_normalize(payload)
         return dict(payload)
@@ -142,14 +144,17 @@ class MatchRegistry(SelectorRegistry):
 
         payload = super().normalize(payload)
 
+        field = self.discriminator_field
+        assert field is not None
+
         config = self.discriminator_config
 
-        if self.discriminator_field not in payload:
+        if field not in payload:
             if not config.allow_missing:
                 raise ValueError(
-                    f"{self.facade.__name__} requires discriminator field '{self.discriminator_field}'."
+                    f"{self.facade.__name__} requires discriminator field '{field}'."
                 )
-            payload[self.discriminator_field] = config.default_value
+            payload[field] = config.default_value
 
         return payload
 
@@ -159,17 +164,21 @@ class MatchRegistry(SelectorRegistry):
         # TODO: we could have a few different behaviors here for odd situations,
         # like if allow_missing is True, but there's no default value... should we
         # instantiate the facade as a fallback?
+        field = self.discriminator_field
+        assert field is not None
 
         # we should have caught this in normalize, what went wrong?
-        assert self.discriminator_field in payload
-        value = payload[self.discriminator_field]
+        assert field in payload
+        value = payload[field]
+
+        if value is ...:
+            return self.facade
 
         match = self._entries.get(value)
         if match is None:
             raise ValueError(
                 f"No discriminator match for value '{value}' on {self.facade.__name__}."
             )
-
         return match.subclass
 
 

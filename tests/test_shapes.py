@@ -125,7 +125,6 @@ def test_shape_instantiation_creates_concrete_instance(shapes):
     assert instance.height == 4.0
 
 
-# TODO: haven't decided on this yet
 # def test_shape_allow_missing_without_default_returns_facade(shapes_allow_missing_facade):
 #     """
 #     Missing selector with allow_missing but no default should return the façade.
