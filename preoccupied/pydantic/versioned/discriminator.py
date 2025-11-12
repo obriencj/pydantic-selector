@@ -22,7 +22,6 @@ Dynamic discriminator helpers and registration-aware base model primitives.
 
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Any, Dict, Mapping, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field
@@ -288,7 +287,6 @@ class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
             raise ValueError(
                 f"No discriminator match for value '{value}' on {root.__name__}."
             )
-        _populate_defaults(subclass, data)
         return subclass, data
 
     @classmethod
@@ -362,56 +360,6 @@ def _normalize_payload(obj: Any) -> Dict[str, Any]:
         return obj.model_dump()
 
     return dict(obj)
-
-
-def _populate_defaults(model: Type["DiscriminatorBaseModel"], data: Dict[str, Any]) -> None:
-    """
-    Fill missing fields using model defaults, evaluating callables when possible.
-    """
-
-    for name, field in model.model_fields.items():
-        if name in data:
-            continue
-        if field.is_required():
-            continue
-        default_value = field.get_default(call_default_factory=True)
-        if default_value is None and field.default is None:
-            data[name] = None
-            continue
-        if callable(default_value):
-            try:
-                signature = _get_callable_arity(default_value)
-            except ValueError:
-                signature = None
-            if signature == 0:
-                default_value = default_value()
-            elif signature == 1:
-                default_value = default_value(SimpleNamespace(**data))
-            else:
-                continue
-        data[name] = default_value
-
-
-def _get_callable_arity(func: Any) -> Optional[int]:
-    """
-    Return callable positional-parameter arity when determinable.
-    """
-
-    import inspect
-
-    try:
-        signature = inspect.signature(func)
-    except (TypeError, ValueError):
-        return None
-
-    arity = 0
-    for param in signature.parameters.values():
-        if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD):
-            if param.default is param.empty:
-                arity += 1
-        elif param.kind is param.VAR_POSITIONAL:
-            return None
-    return arity
 
 
 __all__ = [

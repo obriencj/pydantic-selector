@@ -11,9 +11,10 @@ Demonstrate discriminator-driven model dispatch using Shape façade.
 
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 
 from preoccupied.pydantic.versioned.discriminator import Discriminator, DiscriminatorBaseModel
 
@@ -62,9 +63,14 @@ def shapes():
         Square-specific properties.
         """
 
-        width: float = Field(init=False, frozen=True, default=lambda self: self.side)
-        height: float = Field(init=False, frozen=True, default=lambda self: self.side)
         side: float
+        width: float = Field(init=False, frozen=True, default=None)
+        height: float = Field(init=False, frozen=True, default=None)
+
+        def model_post_init(self, __context) -> None:
+            super().model_post_init(__context)
+            object.__setattr__(self, "width", self.side)
+            object.__setattr__(self, "height", self.side)
 
     return SimpleNamespace(**locals())
 
@@ -192,9 +198,14 @@ def shapes_with_default():
         Square-specific properties.
         """
 
-        width: float = Field(init=False, frozen=True, default=lambda self: self.side)
-        height: float = Field(init=False, frozen=True, default=lambda self: self.side)
         side: float
+        width: float = Field(init=False, frozen=True, default=None)
+        height: float = Field(init=False, frozen=True, default=None)
+
+        def model_post_init(self, __context) -> None:
+            super().model_post_init(__context)
+            object.__setattr__(self, "width", self.side)
+            object.__setattr__(self, "height", self.side)
 
     class Blob(Shape, selector="blob"):
         """
