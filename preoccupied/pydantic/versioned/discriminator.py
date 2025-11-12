@@ -22,13 +22,21 @@ Dynamic discriminator helpers and registration-aware base model primitives.
 
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Type
+from typing_extensions import TypeAlias
 
 from pydantic import BaseModel, Field
 from pydantic.fields import FieldInfo
 
 
-ModelMetaclass = type(BaseModel)
+__all__ = (
+    "Discriminator",
+    "DiscriminatorFieldConfig",
+    "SelectorMeta",
+    "SimpleSelector",
+    "create_selector_base",
+)
+
 
 _MISSING = object()
 
@@ -44,52 +52,51 @@ class DiscriminatorFieldConfig:
     metadata: Mapping[str, Any]
 
 
-def _extend_metadata(field_info: FieldInfo, config: DiscriminatorFieldConfig) -> FieldInfo:
-    """
-    Attach marker metadata to an existing FieldInfo instance.
-    """
-
-    existing = list(field_info.metadata)
-    existing.append(config)
-    object.__setattr__(field_info, "metadata", existing)
-    return field_info
-
-
 def Discriminator(  # noqa: N802 - factory function intentionally PascalCase
-    default: Any = ...,
-    *,
-    allow_missing: bool = False,
-    metadata: Optional[Mapping[str, Any]] = None,
-    **field_kwargs: Any,
-) -> FieldInfo:
+        default: Any = ...,
+        *,
+        allow_missing: bool = False,
+        metadata: Optional[Mapping[str, Any]] = None,
+        **field_kwargs: Any) -> FieldInfo:
     """
     Create a FieldInfo configured as the discriminator selector.
     """
 
     info = Field(default, **field_kwargs)
-    meta = dict(metadata or {})
+
+    if metadata is None:
+        metadata = {}
+
     config = DiscriminatorFieldConfig(
         allow_missing=allow_missing,
-        default_value=meta.get("default"),
-        metadata=meta,
+        default_value=default,
+        metadata=metadata,
     )
-    return _extend_metadata(info, config)
+
+    existing: List[Any] = list(info.metadata)
+    existing.append(config)
+    object.__setattr__(info, "metadata", existing)
+
+    return info
 
 
-class DiscriminatorMeta(ModelMetaclass):
+class SelectorMeta(type(BaseModel)):
     """
     Metaclass responsible for discriminator-aware model registration.
     """
 
-    def __call__(cls, *args: Any, **kwargs: Any) -> "DiscriminatorBaseModel":
+    def __call__(cls, *args: Any, **kwargs: Any) -> Type[BaseModel]:
         """
         Route façade instantiation through validation to return concrete subclasses.
         """
 
-        root = getattr(cls, "__discriminator_root__", cls)
+        root = getattr(cls, "__selector_root__", cls)
         if root is cls:
             if args and kwargs:
-                raise TypeError("Mixing positional and keyword arguments is not supported for façades.")
+                raise TypeError(
+                    "Mixing positional and keyword arguments is not"
+                    " supported for façades."
+                )
             if kwargs:
                 payload: Any = dict(kwargs)
             elif len(args) == 1:
@@ -101,241 +108,246 @@ class DiscriminatorMeta(ModelMetaclass):
             return cls.model_validate(payload)
         return super().__call__(*args, **kwargs)
 
+
     def __new__(  # type: ignore[override]
-        mcls,
-        name: str,
-        bases: Tuple[type, ...],
-        namespace: Dict[str, Any],
-        **kwargs: Any,
-    ) -> Type["DiscriminatorBaseModel"]:
+            mcls,
+            name: str,
+            bases: Tuple[type, ...],
+            namespace: Dict[str, Any],
+            **kwargs: Any) -> Type[BaseModel]:
+
         selector_value = kwargs.pop("selector", _MISSING)
-        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
-        mcls._configure_class(cls, selector_value)
-        return cls
+        model_cls = super().__new__(mcls, name, bases, namespace, **kwargs)
 
-    @classmethod
-    def _configure_class(
-        cls,
-        model_cls: Type["DiscriminatorBaseModel"],
-        selector_value: Any,
-    ) -> None:
-        """
-        Configure discriminator metadata for a freshly constructed class.
-        """
+        if model_cls.__dict__.get("__selector_base__", False):
+            # This is a new selector base class, so we'll just set that up.
+            mcls._initialize_base(model_cls)
+            mcls._attach_interface(model_cls)
 
-        if model_cls.__name__ == "DiscriminatorBaseModel":
-            model_cls.__discriminator_root__ = None
-            model_cls.__discriminator_registry__ = {}
-            model_cls.__discriminator_selector_field__ = None
-            model_cls.__discriminator_config__ = None
-            model_cls.__selector_value__ = None
-            return
+        else:
+            root = mcls._locate_root(bases=model_cls.__mro__[1:])
+            if root is None or root is model_cls:
+                # This is a selecting façade class, ie. a base class that
+                # will have sub-classes that it dispatches to.
+                mcls._configure_root(model_cls)
+                mcls._attach_interface(model_cls)
+            else:
+                # this is a concrete subclass
+                mcls._register_subclass(root, model_cls, selector_value)
+                mcls._attach_interface(model_cls)
 
-        root = cls._locate_root(bases=model_cls.__mro__[1:])
-        if root is None or root is model_cls:
-            cls._configure_root(model_cls)
-            return
-        cls._register_subclass(root, model_cls, selector_value)
+        return model_cls
+
 
     @staticmethod
-    def _locate_root(bases: Tuple[Type[Any], ...]) -> Optional[Type["DiscriminatorBaseModel"]]:
+    def _locate_root(
+            bases: Tuple[Type[Any], ...]) -> Optional[Type[BaseModel]]:
         """
-        Find the nearest discriminator-aware ancestor in the provided MRO slice.
+        Find the nearest selector-aware ancestor in the provided MRO slice.
         """
 
         for base in bases:
-            if isinstance(base, DiscriminatorMeta):
-                if base.__name__ == "DiscriminatorBaseModel" and getattr(base, "__discriminator_root__", None) is None:
+            if isinstance(base, SelectorMeta):
+                if base.__dict__.get("__selector_base__", False):
                     continue
-                root = getattr(base, "__discriminator_root__", None)
+                root = getattr(base, "__selector_root__", None)
                 return root or base
         return None
 
+
     @classmethod
-    def _configure_root(cls, model_cls: Type["DiscriminatorBaseModel"]) -> None:
+    def _initialize_base(cls, model_cls: Type[BaseModel]) -> None:
+        """
+        Seed metadata for the rootless base generated by the factory.
+        """
+
+        model_cls.__selector_root__ = None
+        model_cls.__selector_registry__ = {}
+        model_cls.__selector_discriminator__ = None
+        model_cls.__selector_config__ = None
+        model_cls.__selector_value__ = None
+
+
+    @classmethod
+    def _configure_root(cls, model_cls: Type[BaseModel]) -> None:
         """
         Initialize a root façade capable of routing to registered subclasses.
         """
 
-        field_name, config = _find_discriminator_definition(model_cls)
-        model_cls.__discriminator_root__ = model_cls
-        model_cls.__discriminator_registry__ = {}
-        model_cls.__discriminator_selector_field__ = field_name
-        model_cls.__discriminator_config__ = config
+        field_name, config = _find_selector_definition(model_cls)
+        model_cls.__selector_root__ = model_cls
+        model_cls.__selector_registry__ = {}
+        model_cls.__selector_discriminator__ = field_name
+        model_cls.__selector_config__ = config
         model_cls.__selector_value__ = None
+
 
     @classmethod
     def _register_subclass(
-        cls,
-        root: Type["DiscriminatorBaseModel"],
-        model_cls: Type["DiscriminatorBaseModel"],
-        selector_value: Any,
-    ) -> None:
+            cls,
+            root: Type[BaseModel],
+            model_cls: Type[BaseModel],
+            selector_value: Any) -> None:
         """
         Register a subclass beneath the identified root façade.
         """
 
         if selector_value is _MISSING:
             raise ValueError(
-                f"{model_cls.__name__} must supply 'selector=\"...\"' when subclassing {root.__name__}."
+                f"{model_cls.__name__} must supply 'selector=\"...\"' when subclassing"
+                f" {root.__name__}."
             )
-        model_cls.__discriminator_root__ = root
-        model_cls.__discriminator_selector_field__ = root.__discriminator_selector_field__
-        model_cls.__discriminator_config__ = root.__discriminator_config__
+        model_cls.__selector_root__ = root
+        cls._attach_interface(root)
+        model_cls.__selector_root__ = root
+        model_cls.__selector_registry__ = {}
+        model_cls.__selector_discriminator__ = root.__selector_discriminator__
+        model_cls.__selector_config__ = root.__selector_config__
         model_cls.__selector_value__ = selector_value
-        root._register_selector(selector_value, model_cls)
+        _register_selector_helper(root, selector_value, model_cls)
 
 
-class DiscriminatorBaseModel(BaseModel, metaclass=DiscriminatorMeta):
+    @classmethod
+    def _attach_interface(cls, model_cls: Type[BaseModel]) -> None:
+        """
+        Ensure discriminator helper methods and defaults are present on the class.
+        """
+
+        if "__selector_normalize__" not in model_cls.__dict__:
+            setattr(model_cls, "__selector_normalize__", staticmethod(_normalize_payload))
+
+        if "__selector_resolver__" not in model_cls.__dict__:
+            # Resolver defaults to None; subclasses can provide their own.
+            setattr(model_cls, "__selector_resolver__", None)
+
+        interface_methods = {
+            # "_root": classmethod(_root_helper),
+            "selector_discriminator": classmethod(_selector_discriminator_helper),
+            "selector_config": classmethod(_selector_config_helper),
+            "_register_selector": classmethod(_register_selector_helper),
+            "_resolve_subclass": classmethod(_resolve_subclass_helper),
+            "model_validate": classmethod(_model_validate_helper),
+        }
+
+        for name, method in interface_methods.items():
+            if name not in model_cls.__dict__:
+                setattr(model_cls, name, method)
+
+
+def _selector_discriminator_helper(cls: Type[BaseModel]) -> Optional[str]:
     """
-    Base model that dispatches to discriminator-registered subclasses.
+    Return the configured discriminator field name, if any.
     """
 
-    # __discriminator_root__: Optional[Type["DiscriminatorBaseModel"]] = None
-    # __discriminator_registry__: Dict[Any, Type["DiscriminatorBaseModel"]] = {}
-    # __discriminator_selector_field__: Optional[str] = None
-    # __discriminator_config__: Optional[DiscriminatorFieldConfig] = None
-    # __selector_value__: Optional[Any] = None
+    root = getattr(cls, "__selector_root__", cls)
+    return getattr(root, "__selector_discriminator__", None)
 
 
-    @classmethod
-    def _root(cls) -> Type["DiscriminatorBaseModel"]:
-        """
-        Retrieve the façade root for the current class.
-        """
+def _selector_config_helper(
+        cls: Type[BaseModel]) -> Optional[DiscriminatorFieldConfig]:
+    """
+    Return the discriminator marker metadata, if configured.
+    """
 
-        return cls.__discriminator_root__ or cls
-
-
-    @classmethod
-    def selector_field(cls) -> Optional[str]:
-        """
-        Return the configured discriminator field name, if any.
-        """
-
-        return cls._root().__discriminator_selector_field__
+    root = getattr(cls, "__selector_root__", cls)
+    return getattr(root, "__selector_config__", None)
 
 
-    @classmethod
-    def selector_config(cls) -> Optional[DiscriminatorFieldConfig]:
-        """
-        Return the discriminator marker metadata, if configured.
-        """
+def _register_selector_helper(
+        cls: Type[BaseModel],
+        value: Any,
+        subclass: Type[BaseModel]) -> None:
+    """
+    Record a subclass for the provided selector value.
+    """
 
-        return cls._root().__discriminator_config__
+    registry = getattr(cls, "__selector_registry__", None)
+    if registry is None:
+        registry = {}
+        setattr(cls, "__selector_registry__", registry)
+    if value in registry:
+        existing = registry[value]
+        raise ValueError(
+            f"Duplicate discriminator selector '{value}' for {cls.__name__}: "
+            f"{existing.__name__} already registered."
+        )
+    registry[value] = subclass
 
 
-    @classmethod
-    def _register_selector(cls, value: Any, subclass: Type["DiscriminatorBaseModel"]) -> None:
-        """
-        Record a subclass for the provided selector value.
-        """
+def _resolve_subclass_helper(
+        cls: Type[BaseModel],
+        obj: Any) -> Tuple[Type[BaseModel], Dict[str, Any]]:
+    """
+    Determine the concrete subclass for the supplied payload.
+    """
 
-        root = cls._root()
-        if value in root.__discriminator_registry__:
-            existing = root.__discriminator_registry__[value]
+    normalize: Callable[[Any], Dict[str, Any]]
+    normalize = getattr(cls, "__selector_normalize__", _normalize_payload)
+    data = normalize(obj)
+    resolver = getattr(cls, "__selector_resolver__", None)
+    if callable(resolver):
+        result = resolver(cls, data)
+        if not isinstance(result, tuple) or len(result) != 2:
+            raise ValueError("Custom selector resolver must return (subclass, payload).")
+        return result
+
+    field = cls.selector_discriminator()
+    config = cls.selector_config()
+    if field is None or config is None:
+        raise ValueError(f"{cls.__name__} is missing discriminator metadata.")
+
+    value = data.get(field, _MISSING)
+    if value is _MISSING:
+        if not config.allow_missing:
             raise ValueError(
-                f"Duplicate discriminator selector '{value}' for {root.__name__}: "
-                f"{existing.__name__} already registered."
+                f"{cls.__name__} requires discriminator field '{field}'."
             )
-        root.__discriminator_registry__[value] = subclass
+        value = config.default_value
+        data[field] = value
+
+    root = getattr(cls, "__selector_root__", cls)
+    registry = getattr(root, "__selector_registry__", {})
+    subclass = registry.get(value)
+    if subclass is None:
+        raise ValueError(
+            f"No discriminator match for value '{value}' on {root.__name__}."
+        )
+    return subclass, data
 
 
-    @classmethod
-    def _extract_selector(cls, obj: Any) -> Any:
-        """
-        Pull the selector value from arbitrary input.
-        """
-
-        field = cls.selector_field()
-        if field is None:
-            raise ValueError(f"{cls.__name__} is missing discriminator configuration.")
-
-        if isinstance(obj, Mapping):
-            return obj.get(field, _MISSING)
-
-        if isinstance(obj, BaseModel):
-            return getattr(obj, field, _MISSING)
-
-        if hasattr(obj, field):
-            return getattr(obj, field)
-
-        return _MISSING
-
-
-    @classmethod
-    def _resolve_subclass(
-        cls,
+def _model_validate_helper(
+        cls: Type[BaseModel],
         obj: Any,
-    ) -> Tuple[Type["DiscriminatorBaseModel"], Dict[str, Any]]:
-        """
-        Determine the concrete subclass for the supplied payload.
-        """
+        *,
+        strict: Optional[bool] = None,
+        from_attributes: Optional[bool] = None,
+        context: Optional[Dict[str, Any]] = None) -> Type[BaseModel]:
+    """
+    Perform dynamic validation, dispatching façade classes to registered subclasses.
+    """
 
-        data = _normalize_payload(obj)
-        field = cls.selector_field()
-        config = cls.selector_config()
-        if field is None or config is None:
-            raise ValueError(f"{cls.__name__} is missing discriminator metadata.")
+    if cls is getattr(cls, "__selector_root__", cls):
+        subclass, normalized = cls._resolve_subclass(obj)
+        if subclass is cls:
+            obj = normalized
 
-        value = data.get(field, _MISSING)
-        if value is _MISSING:
-            if not config.allow_missing:
-                raise ValueError(
-                    f"{cls.__name__} requires discriminator field '{field}'."
-                )
-            value = config.default_value
-            data[field] = value
-
-        root = cls._root()
-        subclass = root.__discriminator_registry__.get(value)
-        if subclass is None:
-            raise ValueError(
-                f"No discriminator match for value '{value}' on {root.__name__}."
-            )
-        return subclass, data
-
-
-    @classmethod
-    def model_validate(  # type: ignore[override]
-            cls,
-            obj: Any,
-            *,
-            strict: Optional[bool] = None,
-            from_attributes: Optional[bool] = None,
-            context: Optional[Dict[str, Any]] = None) -> "DiscriminatorBaseModel":
-        """
-        Perform dynamic validation, dispatching façade classes to registered subclasses.
-        """
-
-        if cls is cls._root():
-            payload = _normalize_payload(obj)
-            subclass, normalized = cls._resolve_subclass(payload)
-            if subclass is cls:
-                return super().model_validate(
-                    normalized,
-                    strict=strict,
-                    from_attributes=from_attributes,
-                    context=context,
-                )
+        else:
             return subclass.model_validate(
                 normalized,
                 strict=strict,
                 from_attributes=from_attributes,
-                context=context,
-            )
+                context=context)
 
-        return super().model_validate(
-            obj,
-            strict=strict,
-            from_attributes=from_attributes,
-            context=context,
-        )
+    return BaseModel.model_validate.__func__(
+        cls,
+        obj,
+        strict=strict,
+        from_attributes=from_attributes,
+        context=context)
 
 
-def _find_discriminator_definition(
-    model_cls: Type["DiscriminatorBaseModel"],
-) -> Tuple[str, DiscriminatorFieldConfig]:
+def _find_selector_definition(
+        model_cls: Type[BaseModel]) -> Tuple[str, DiscriminatorFieldConfig]:
     """
     Locate the discriminator field declared on the façade.
     """
@@ -368,11 +380,58 @@ def _normalize_payload(obj: Any) -> Dict[str, Any]:
     return dict(obj)
 
 
-__all__ = [
-    "Discriminator",
-    "DiscriminatorBaseModel",
-    "DiscriminatorFieldConfig",
-    "DiscriminatorMeta",
-]
+SelectorResolver: TypeAlias = Callable[
+    [Type[BaseModel], Dict[str, Any]],
+    Tuple[Type[BaseModel], Dict[str, Any]]]
+"""
+Type alias for the discriminator resolver function, in form of
+
+resolver(cls, data) -> (subclass, normalized_data)
+
+where:
+- cls is the discriminator base class
+- data is the normalized payload
+- subclass is the concrete subclass to dispatch to
+- data is the normalized payload to dispatch to the subclass
+"""
+
+
+def create_selector_base(
+        *,
+        name: str,
+        normalize_payload: Optional[Callable[[Any], Dict[str, Any]]] = None,
+        resolver: Optional[SelectorResolver] = None) -> Type[BaseModel]:
+    """
+    Produce a selector facade base class using the shared metaclass machinery.
+    """
+
+    namespace: Dict[str, Any] = {
+        "__selector_base__": True
+    }
+
+    if normalize_payload is not None:
+        namespace["__selector_normalize__"] = staticmethod(normalize_payload)
+
+    if resolver is not None:
+        namespace["__selector_resolver__"] = staticmethod(resolver)
+
+    return SelectorMeta(name, (BaseModel,), namespace, selector_base=True)
+
+
+class SimpleSelector(BaseModel, metaclass=SelectorMeta):
+    """
+    Base model that acts as a facade for to its subclasses, based on the value
+    of a discriminator field.
+
+    Subclasses must declare a single discriminator field using the
+    `Discriminator` helper.
+
+    instantiation or model_validate() will select the appropriate subclass based
+    on the value of the discriminator field on the incoming data, compared
+    against the values of the field on the registered subclasses.
+    """
+
+    __selector_base__ = True
+
 
 # The end.

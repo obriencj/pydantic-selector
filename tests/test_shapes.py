@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from pydantic import Field, computed_field, model_validator
 
-from preoccupied.pydantic.versioned.discriminator import Discriminator, DiscriminatorBaseModel
+from preoccupied.pydantic.versioned.discriminator import Discriminator, SimpleSelector
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def shapes():
     Provide a namespace containing Shape façade and concrete subclasses.
     """
 
-    class Shape(DiscriminatorBaseModel):
+    class Shape(SimpleSelector):
         """
         Façade capturing shared shape attributes and discriminator selector.
         """
@@ -158,16 +158,12 @@ def shapes_with_default():
     Provide a namespace containing Shape façade with default Blob fallback.
     """
 
-    class Shape(DiscriminatorBaseModel):
+    class Shape(SimpleSelector):
         """
         Façade that falls back to Blob when selector is missing.
         """
 
-        name: str = Discriminator(
-            description="Identifier selecting the concrete shape model.",
-            allow_missing=True,
-            metadata={"default": "blob"},
-        )
+        name: str = Discriminator(default="blob", allow_missing=True)
         color: str = Field(default="black")
 
     class Circle(Shape, selector="circle"):
