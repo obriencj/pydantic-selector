@@ -9,7 +9,6 @@ Unit tests covering resolution policy helpers.
 :ai-assistant: GPT-5 Codex via Cursor
 """
 
-from typing import List
 
 import pytest
 from semver import Version
@@ -21,7 +20,7 @@ from preoccupied.pydantic.versioned.semvermap import (
 
 
 @pytest.fixture
-def version_sequence() -> List[Version]:
+def version_sequence():
     """
     Provide an ordered list of semantic versions for policy evaluation.
     """
@@ -47,10 +46,10 @@ def version_sequence() -> List[Version]:
     ],
 )
 def test_resolve_version_le(
-        version_sequence: List[Version],
-        selector: str,
-        expected: Version,
-        note: str) -> None:
+        version_sequence,
+        selector,
+        expected,
+        note):
     """
     ResolveVersionLE scenarios for exact, range, and inequality selectors.
     """
@@ -73,10 +72,10 @@ def test_resolve_version_le(
     ],
 )
 def test_resolve_version_ge(
-        version_sequence: List[Version],
-        selector: str,
-        expected: Version,
-        note: str) -> None:
+        version_sequence,
+        selector,
+        expected,
+        note):
     """
     ResolveVersionGE scenarios for exact, range, and inequality selectors.
     """
@@ -96,10 +95,10 @@ def test_resolve_version_ge(
     ],
 )
 def test_resolve_version_exact(
-        version_sequence: List[Version],
-        selector: str,
-        expected: Version,
-        note: str) -> None:
+        version_sequence,
+        selector,
+        expected,
+        note):
     """
     ResolveVersionExact scenarios covering exact and range selectors.
     """
