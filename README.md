@@ -70,25 +70,23 @@ from preoccupied.pydantic.selector import (
 
 
 class Document(VersionedSelector):
-    version: Version = Discriminator(default="1.0.0", allow_missing=True)
+    version: Version = Discriminator(missing_value="1.0.0")
     payload: str
 
-
-class DocumentV1(Document):
+class Document_v1(Document):
     version: Version = Match("1.0.0")
     payload: str = "v1"
 
-
-class DocumentV2(Document):
+class Document_v2(Document):
     version: Version = Match("2.0.0")
     payload: str = "v2"
 
 
-doc = Document.model_validate({"version": "2.0.0"})
-assert isinstance(doc, DocumentV2)
+doc = Document(version="2.0.0")
+assert isinstance(doc, Document_v2_0)
 
-fallback = Document.model_validate({})
-assert isinstance(fallback, DocumentV1)
+fallback = Document()
+assert isinstance(fallback, Document)
 ```
 
 By default `VersionedSelector` resolves to the nearest lower registered version. Override `__version_policy__` with `'exact'`, `'nearest_le'` (or `'le'`), or `'nearest_ge'` (or `'ge'`) to change the selection strategy.
