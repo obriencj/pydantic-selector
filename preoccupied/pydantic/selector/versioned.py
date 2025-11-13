@@ -55,7 +55,7 @@ from typing import Any, Callable, Optional, Type
 
 from semver import Version as SemVersion
 
-from pydantic import GetJsonSchemaHandler
+from pydantic import BaseModel, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
@@ -132,46 +132,20 @@ class VersionedRegistry(MatchRegistry):
     def __init__(self, facade: Type[MatchSelector]) -> None:
         super().__init__(facade)
         policy = getattr(facade, "__version_policy__", "le")
-        self._semver = SemverMap(default_policy=policy)
+        self._entries = SemverMap(default_policy=policy)
 
 
-    def register(self, subclass: Type[MatchSelector]) -> None:
-        matches = self.discover_matches(subclass)
-        if len(matches) != 1:
+    def register(self, subclass: Type[BaseModel]) -> None:
+        found = self.discover_matches(subclass)
+        if len(found) != 1:
             raise ValueError(
                 f"{subclass.__name__} must declare exactly one Match field."
             )
-        value = matches[0][1].value
-        version = _ensure_version(value)
-        super().register(subclass)
-        self._semver.set(version, subclass)
 
+        value = found[0][1].value
 
-    def normalize(self, payload: dict[str, Any]) -> dict[str, Any]:
-        payload = super().normalize(payload)
-
-        field = self.discriminator_field
-        assert field is not None
-
-        if field not in payload:
-            return payload
-
-        value = payload[field]
-        if value is ...:
-            return payload
-
-        payload[field] = str(_ensure_version(value))
-        return payload
-
-
-    def resolve(self, payload: dict[str, Any]) -> Type[MatchSelector]:
-        field = self.discriminator_field
-        if field is None or field not in payload:
-            return self.facade
-        selector = payload[field]
-        if selector is ...:
-            return self.facade
-        return self._semver.get(str(selector))
+        # We bypass the normal registration process to skip the dup checking.
+        super()._default_register(value, subclass)
 
 
 class VersionedSelector(MatchSelector):

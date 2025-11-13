@@ -8,7 +8,7 @@ tox:
 test:
 	$(TOX) -qe py
 
-lint:
+flake8:
 	$(TOX) -qe flake8
 
 coverage:

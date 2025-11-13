@@ -87,7 +87,7 @@ class ResolveVersionLE(ResolutionPolicy):
 
     def resolve(
             self,
-            selector: str,
+            selector: Union[str, Version],
             available: Sequence[Version]) -> Optional[Version]:
         """
         Return the highest version that satisfies the selector while remaining
@@ -99,6 +99,9 @@ class ResolveVersionLE(ResolutionPolicy):
         treated as a single ``<=`` comparison evaluated from the highest
         available version downward.
         """
+
+        if isinstance(selector, Version):
+            selector = str(selector)
 
         if matcher_like(selector):
             matchers = selector.split(";")
@@ -125,7 +128,7 @@ class ResolveVersionGE(ResolutionPolicy):
 
     def resolve(
             self,
-            selector: str,
+            selector: Union[str, Version],
             available: Sequence[Version]) -> Optional[Version]:
         """
         Return the lowest version that satisfies the selector while remaining
@@ -136,6 +139,9 @@ class ResolveVersionGE(ResolutionPolicy):
         interpreted as a single ``>=`` comparison evaluated from the lowest
         available version upward.
         """
+
+        if isinstance(selector, Version):
+            selector = str(selector)
 
         if matcher_like(selector):
             matchers = selector.split(";")
@@ -162,7 +168,7 @@ class ResolveVersionExact(ResolutionPolicy):
 
     def resolve(
             self,
-            selector: str,
+            selector: Union[str, Version],
             available: Sequence[Version]) -> Optional[Version]:
         """
         Return the version that satisfies all selector constraints, whether an
@@ -172,6 +178,9 @@ class ResolveVersionExact(ResolutionPolicy):
         most recent satisfying entry wins. Non-range selectors are interpreted
         as a single equality comparison.
         """
+
+        if isinstance(selector, Version):
+            selector = str(selector)
 
         if matcher_like(selector):
             matchers = selector.split(";")

@@ -43,7 +43,7 @@ class Rectangle(Shape):
 
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, List
+from typing import Any, Mapping, Optional
 
 from pydantic import Field
 from pydantic.fields import FieldInfo
