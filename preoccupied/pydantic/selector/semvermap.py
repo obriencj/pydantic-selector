@@ -67,8 +67,8 @@ class ResolutionPolicy(Protocol):
 
     def resolve(
             self,
-            selector: str,
-            available: Sequence[Version]) -> str:
+            selector: Union[str, Version, None],
+            available: Sequence[Version]) -> Optional[Version]:
         """
         Return the selected version string given a selector and available keys.
 
@@ -87,7 +87,7 @@ class ResolveVersionLE(ResolutionPolicy):
 
     def resolve(
             self,
-            selector: Union[str, Version],
+            selector: Union[str, Version, None],
             available: Sequence[Version]) -> Optional[Version]:
         """
         Return the highest version that satisfies the selector while remaining
@@ -99,6 +99,12 @@ class ResolveVersionLE(ResolutionPolicy):
         treated as a single ``<=`` comparison evaluated from the highest
         available version downward.
         """
+
+        if not available:
+            return None
+
+        if selector is None:
+            return available[0] if available else None
 
         if isinstance(selector, Version):
             selector = str(selector)
@@ -128,7 +134,7 @@ class ResolveVersionGE(ResolutionPolicy):
 
     def resolve(
             self,
-            selector: Union[str, Version],
+            selector: Union[str, Version, None],
             available: Sequence[Version]) -> Optional[Version]:
         """
         Return the lowest version that satisfies the selector while remaining
@@ -139,6 +145,12 @@ class ResolveVersionGE(ResolutionPolicy):
         interpreted as a single ``>=`` comparison evaluated from the lowest
         available version upward.
         """
+
+        if not available:
+            return None
+
+        if selector is None:
+            return available[-1] if available else None
 
         if isinstance(selector, Version):
             selector = str(selector)
@@ -168,7 +180,7 @@ class ResolveVersionExact(ResolutionPolicy):
 
     def resolve(
             self,
-            selector: Union[str, Version],
+            selector: Union[str, Version, None],
             available: Sequence[Version]) -> Optional[Version]:
         """
         Return the version that satisfies all selector constraints, whether an
@@ -178,6 +190,12 @@ class ResolveVersionExact(ResolutionPolicy):
         most recent satisfying entry wins. Non-range selectors are interpreted
         as a single equality comparison.
         """
+
+        if not available:
+            return None
+
+        if selector is None:
+            return None
 
         if isinstance(selector, Version):
             selector = str(selector)
@@ -272,7 +290,7 @@ class SemverMap(Generic[V]):
 
 
     def get(self,
-            selector: str | None = None,
+            selector: Union[str, Version, None] = None,
             default: Union[V, _Sentinel] = _MISSING,
             *,
             policy: Union[str, ResolutionPolicy, None] = None) -> V:
@@ -339,7 +357,7 @@ class SemverMap(Generic[V]):
         """
 
         if isinstance(selector, str):
-            if selector in self._cache:
+            if self._cache.get(selector) is not None:
                 return True
             else:
                 resolver = self.resolver()
@@ -350,6 +368,21 @@ class SemverMap(Generic[V]):
             return selector in self._entries
 
         return False
+
+
+    def delete(self, selector: Union[str, Version]) -> None:
+        """
+        Delete the value for the given version. Specific values only, no ranges.
+        """
+
+        if isinstance(selector, str):
+            selector = Version.parse(selector)
+
+        # allow this to raise KeyError if the version is not found
+        del self._entries[selector]
+
+        self._cache.clear()
+        self._versions = sorted(self._entries.keys())
 
 
     def items(self) -> Iterator[Tuple[Version, V]]:
